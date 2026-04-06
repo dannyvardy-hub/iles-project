@@ -18,8 +18,11 @@ class PlacementListCreateView(APIView):
             placements = InternshipPlacement.objects.filter(
                 workplace_supervisor=user
             )
+<<<<<<< HEAD
         elif user.role == 'ACADEMIC_SUPERVISOR':
             placements = InternshipPlacement.objects.all()
+=======
+>>>>>>> 4e77d46 (feat: add placements API - list, create, detail endpoints)
         else:
             return Response(
                 {'error': 'Not authorized'},
