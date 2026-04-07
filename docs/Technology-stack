@@ -1,0 +1,11 @@
+Technology Stack
+
+| Part | Technology | Reason |
+|------|------------|--------|
+| Backend | Django (Python) | Handles all business logic, APIs, database, and authentication. |
+| Frontend | React (JavaScript) | Builds the user interface and communicates with the backend via API. |
+| Database | PostgreSQL | Stores all system data reliably with support for relationships. |
+| Authentication | JWT Tokens | Secure login that works well between React and Django. |
+| Version Control | Git and GitHub | Tracks all code changes and allows team collaboration. |
+
+
