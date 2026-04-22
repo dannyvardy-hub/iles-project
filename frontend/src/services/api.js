@@ -1,7 +1,11 @@
 import axios from "axios";
 
 const api = axios.create({
+
   baseURL: "http://localhost:8000/api",
+
+  baseURL: "http://127.0.0.1:8000/api",
+
   headers: { "Content-Type": "application/json" },
 });
 
@@ -25,6 +29,7 @@ api.interceptors.response.use(
       }
       try {
         const res = await axios.post("http://localhost:8000/api/token/refresh/", { refresh });
+        const res = await axios.post("http://127.0.0.1:8000/api/token/refresh/", { refresh });
         localStorage.setItem("access_token", res.data.access);
         original.headers.Authorization = `Bearer ${res.data.access}`;
         return api(original);

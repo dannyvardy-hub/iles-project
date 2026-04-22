@@ -166,7 +166,7 @@ const styles = {
       </form>
     </div>
   );
-}
+
 const styles = {
   container: {
     height: "100vh",
