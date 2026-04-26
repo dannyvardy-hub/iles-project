@@ -1,217 +1,208 @@
 
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import Layout from "../../components/Layout";
 import { fetchDashboard } from "../../services/userService";
-import { fetchEvaluations, fetchCriteria, submitEvaluation } from "../../services/evaluationService";
-import { fetchPlacements } from "../../services/placementService";
-import { fetchLogs } from "../../services/logService";
+import { fetchLogs, academicEvaluateLog } from "../../services/logService";
 
 export default function AcademicDashboard() {
   const [data, setData] = useState(null);
+  const [allLogs, setAllLogs] = useState([]);
   const [logs, setLogs] = useState([]);
-  const [evaluations, setEvaluations] = useState([]);
-  const [criteria, setCriteria] = useState([]);
-  const [placements, setPlacements] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showEvalForm, setShowEvalForm] = useState(false);
-  const [selectedPlacement, setSelectedPlacement] = useState("");
-  const [scores, setScores] = useState({});
-  const [notes, setNotes] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [evalError, setEvalError] = useState("");
-  const [evalSuccess, setEvalSuccess] = useState("");
-  const [activeTab, setActiveTab] = useState("logs");
-  const navigate = useNavigate();
+  const [grades, setGrades] = useState({});
+  const [comments, setComments] = useState({});
+  const [actionLoading, setActionLoading] = useState(null);
+  const [error, setError] = useState("");
+  const [filter, setFilter] = useState("PENDING_ACADEMIC_EVALUATION");
 
   useEffect(() => {
-    Promise.all([
-      fetchDashboard(),
-      fetchLogs(),
-      fetchEvaluations(),
-      fetchCriteria(),
-      fetchPlacements()
-    ])
-      .then(([dash, logsData, evals, crit, plac]) => {
+    Promise.all([fetchDashboard(), fetchLogs()])
+      .then(([dash, logsData]) => {
         setData(dash);
-        setLogs(logsData);
-        setEvaluations(evals);
-        setCriteria(crit.filter(c => c.is_active));
-        setPlacements(plac);
+        setAllLogs(logsData);
+        setLogs(logsData.filter(l => l.status === "PENDING_ACADEMIC_EVALUATION"));
       })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
 
-  const total = criteria.reduce((sum, c) => {
-    return sum + ((Number(scores[c.id]) || 0) * (c.weight / 100));
-  }, 0);
-
-  const handleEvalSubmit = async (e) => {
-    e.preventDefault();
-    setEvalError(""); setEvalSuccess(""); setSubmitting(true);
-    const selectedP = placements.find(p => p.id === parseInt(selectedPlacement));
-    try {
-      const newEval = await submitEvaluation({
-        student: selectedP?.student,
-        placement: selectedPlacement,
-        scores,
-        notes,
-      });
-      setEvaluations([...evaluations, newEval]);
-      setEvalSuccess("Evaluation submitted successfully.");
-      setShowEvalForm(false);
-      setSelectedPlacement("");
-      setScores({});
-      setNotes("");
-    } catch (err) {
-      const errors = err.response?.data;
-      setEvalError(typeof errors === "object" ? JSON.stringify(errors) : "Failed to submit.");
-    } finally {
-      setSubmitting(false);
+  const handleFilter = (f) => {
+    setFilter(f);
+    if (f === "ALL") {
+      setLogs(allLogs);
+    } else {
+      setLogs(allLogs.filter(l => l.status === f));
     }
   };
 
-  const statusColor = {
-    DRAFT: "#d97706", SUBMITTED: "#2563eb",
-    REVIEWED: "#7c3aed", APPROVED: "#16a34a"
+  const handleEvaluate = async (id) => {
+    if (!grades[id]?.trim()) return alert("Please enter a grade before submitting.");
+    setActionLoading(id);
+    setError("");
+    try {
+      await academicEvaluateLog(id, grades[id], comments[id] || "");
+      const updated = allLogs.map(l =>
+        l.id === id
+          ? { ...l, status: "COMPLETED", academic_grade: grades[id], academic_comments: comments[id] }
+          : l
+      );
+      setAllLogs(updated);
+      if (filter === "ALL") {
+        setLogs(updated);
+      } else {
+        setLogs(updated.filter(l => l.status === filter));
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || JSON.stringify(err.response?.data) || "Failed to evaluate.");
+    } finally {
+      setActionLoading(null);
+    }
   };
+
+  const filterButtons = [
+    { key: "PENDING_ACADEMIC_EVALUATION", label: "Needs Evaluation" },
+    { key: "COMPLETED", label: "Evaluated" },
+    { key: "ALL", label: "All Logs" },
+  ];
 
   return (
     <Layout title="Academic Supervisor Dashboard">
-      <div style={{ background: "#fff", padding: "1.25rem", borderRadius: 10, borderLeft: "4px solid #2563eb", maxWidth: 300, marginBottom: "1.5rem" }}>
-        <p style={{ margin: 0, color: "#64748b" }}>Total Evaluations</p>
-        <h2 style={{ margin: "0.25rem 0 0", color: "#2563eb" }}>{loading ? "..." : data?.total_evaluations}</h2>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 15, marginBottom: "1.5rem" }}>
+        <div style={{ background: "#fff", padding: "1.25rem", borderRadius: 10, borderLeft: "4px solid #7c3aed" }}>
+          <p style={{ margin: 0, color: "#64748b" }}>Needs Evaluation</p>
+          <h2 style={{ margin: "0.25rem 0 0", color: "#7c3aed" }}>
+            {loading ? "..." : allLogs.filter(l => l.status === "PENDING_ACADEMIC_EVALUATION").length}
+          </h2>
+        </div>
+        <div style={{ background: "#fff", padding: "1.25rem", borderRadius: 10, borderLeft: "4px solid #16a34a" }}>
+          <p style={{ margin: 0, color: "#64748b" }}>Evaluated</p>
+          <h2 style={{ margin: "0.25rem 0 0", color: "#16a34a" }}>
+            {loading ? "..." : allLogs.filter(l => l.status === "COMPLETED").length}
+          </h2>
+        </div>
       </div>
 
-      <div style={{ display: "flex", gap: 10, marginBottom: "1.5rem", flexWrap: "wrap" }}>
-        <button onClick={() => setActiveTab("logs")}
-          style={{ padding: "0.6rem 1.2rem", background: activeTab === "logs" ? "#2563eb" : "#fff", color: activeTab === "logs" ? "#fff" : "#1e293b", border: "1px solid #cbd5e1", borderRadius: 6, cursor: "pointer", fontWeight: 600 }}>
-          View Student Logs
-        </button>
-        <button onClick={() => setActiveTab("evaluations")}
-          style={{ padding: "0.6rem 1.2rem", background: activeTab === "evaluations" ? "#2563eb" : "#fff", color: activeTab === "evaluations" ? "#fff" : "#1e293b", border: "1px solid #cbd5e1", borderRadius: 6, cursor: "pointer", fontWeight: 600 }}>
-          View Evaluations
-        </button>
-        <button onClick={() => { setActiveTab("evaluate"); setShowEvalForm(true); }}
-          style={{ padding: "0.6rem 1.2rem", background: "#16a34a", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600 }}>
-          + New Evaluation
-        </button>
+      <div style={{ display: "flex", gap: 8, marginBottom: "1.5rem" }}>
+        {filterButtons.map(b => (
+          <button key={b.key} onClick={() => handleFilter(b.key)}
+            style={{
+              padding: "0.5rem 1rem", borderRadius: 6,
+              border: "1px solid #cbd5e1",
+              background: filter === b.key ? "#2563eb" : "#fff",
+              color: filter === b.key ? "#fff" : "#1e293b",
+              cursor: "pointer", fontWeight: filter === b.key ? 600 : 400
+            }}>
+            {b.label}
+            {b.key !== "ALL" && (
+              <span style={{ marginLeft: 6, background: filter === b.key ? "rgba(255,255,255,0.3)" : "#f1f5f9", padding: "0.1rem 0.4rem", borderRadius: 10, fontSize: "0.8rem" }}>
+                {b.key === "PENDING_ACADEMIC_EVALUATION"
+                  ? allLogs.filter(l => l.status === "PENDING_ACADEMIC_EVALUATION").length
+                  : allLogs.filter(l => l.status === "COMPLETED").length}
+              </span>
+            )}
+          </button>
+        ))}
       </div>
 
-      {activeTab === "logs" && (
-        <div style={{ background: "#fff", padding: "1.5rem", borderRadius: 10 }}>
-          <h3 style={{ marginTop: 0 }}>Student Logs</h3>
-          {loading && <p>Loading...</p>}
-          {!loading && logs.length === 0 && <p style={{ color: "#64748b" }}>No logs submitted yet.</p>}
-          {logs.map(log => (
-            <div key={log.id} style={{ padding: "1rem", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <strong>Week {log.week_number}</strong>
-                <p style={{ margin: "0.25rem 0 0", color: "#64748b", fontSize: "0.85rem" }}>
-                  Student: {log.student_name || `ID: ${log.student}`}
-                </p>
-                <p style={{ margin: "0.25rem 0 0", color: "#64748b", fontSize: "0.85rem" }}>
-                  {log.submitted_at ? `Submitted: ${log.submitted_at.slice(0, 10)}` : `Created: ${log.created_at?.slice(0, 10)}`}
-                </p>
-                <p style={{ margin: "0.5rem 0 0", lineHeight: 1.6, color: "#374151", fontSize: "0.9rem" }}>
-                  {log.activities?.slice(0, 150)}{log.activities?.length > 150 ? "..." : ""}
-                </p>
-              </div>
-              <span style={{ color: statusColor[log.status], fontWeight: 700, marginLeft: 15 }}>
-                {log.status}
-              </span>
-            </div>
-          ))}
-        </div>
+      {error && <p style={{ color: "red" }}>{error}</p>}
+      {loading && <p>Loading...</p>}
+      {!loading && logs.length === 0 && (
+        <p style={{ color: "#64748b" }}>
+          {filter === "PENDING_ACADEMIC_EVALUATION"
+            ? "No logs waiting for evaluation. Logs need to be approved by workplace supervisor first."
+            : filter === "COMPLETED"
+            ? "No evaluated logs yet."
+            : "No logs found."}
+        </p>
       )}
 
-      {activeTab === "evaluations" && (
-        <div style={{ background: "#fff", padding: "1.5rem", borderRadius: 10 }}>
-          <h3 style={{ marginTop: 0 }}>Submitted Evaluations</h3>
-          {loading && <p>Loading...</p>}
-          {!loading && evaluations.length === 0 && <p style={{ color: "#64748b" }}>No evaluations submitted yet.</p>}
-          {evaluations.map(e => (
-            <div key={e.id} style={{ padding: "0.75rem 0", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <strong>{e.student_name}</strong>
-                <p style={{ margin: "0.25rem 0 0", color: "#64748b", fontSize: "0.85rem" }}>
-                  Submitted: {e.submitted_at?.slice(0, 10)}
-                </p>
-                {e.notes && <p style={{ margin: "0.25rem 0 0", color: "#64748b", fontSize: "0.85rem" }}>Notes: {e.notes}</p>}
-              </div>
-              <span style={{ fontSize: "1.25rem", fontWeight: 700, color: e.total_score >= 70 ? "#16a34a" : "#dc2626" }}>
-                {e.total_score} / 100
-              </span>
+      {logs.map(log => (
+        <div key={log.id} style={{ background: "#fff", padding: "1.5rem", borderRadius: 10, marginBottom: 15, boxShadow: "0 1px 4px rgba(0,0,0,0.07)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div>
+              <h3 style={{ margin: 0 }}>Week {log.week_number}</h3>
+              <p style={{ margin: "0.25rem 0 0", color: "#64748b", fontSize: "0.85rem" }}>
+                Student: <strong>{log.student_name || `ID: ${log.student}`}</strong>
+              </p>
+              <p style={{ margin: "0.25rem 0 0", color: "#64748b", fontSize: "0.85rem" }}>
+                Submitted: {log.submitted_at?.slice(0, 10)}
+              </p>
             </div>
-          ))}
-        </div>
-      )}
+            <span style={{
+              fontWeight: 700, fontSize: "0.85rem",
+              color: log.status === "COMPLETED" ? "#16a34a" : "#7c3aed",
+              background: log.status === "COMPLETED" ? "#f0fdf4" : "#f5f3ff",
+              padding: "0.3rem 0.7rem", borderRadius: 20
+            }}>
+              {log.status === "COMPLETED" ? "Evaluated" : "Needs Evaluation"}
+            </span>
+          </div>
 
-      {activeTab === "evaluate" && (
-        <div style={{ background: "#fff", padding: "1.5rem", borderRadius: 10 }}>
-          <h3 style={{ marginTop: 0 }}>Submit New Evaluation</h3>
-          {evalError && <p style={{ color: "red" }}>{evalError}</p>}
-          {evalSuccess && <p style={{ color: "#16a34a", fontWeight: 600 }}>{evalSuccess}</p>}
+          <h4 style={{ marginBottom: 4, marginTop: "1rem" }}>Activities</h4>
+          <p style={{ lineHeight: 1.6, marginTop: 0 }}>{log.activities}</p>
 
-          {criteria.length === 0 && (
-            <p style={{ color: "#d97706" }}>No evaluation criteria found. Ask admin to add criteria in Django admin first.</p>
+          {log.learning_outcomes && (
+            <>
+              <h4 style={{ marginBottom: 4 }}>Learning Outcomes</h4>
+              <p style={{ lineHeight: 1.6, marginTop: 0 }}>{log.learning_outcomes}</p>
+            </>
           )}
 
-          <form onSubmit={handleEvalSubmit}>
-            <label style={lbl}>Placement (Student)</label>
-            <select value={selectedPlacement} onChange={e => setSelectedPlacement(e.target.value)} required style={inp}>
-              <option value="">-- Select placement --</option>
-              {placements.map(p => (
-                <option key={p.id} value={p.id}>{p.company_name} — Student ID: {p.student}</option>
-              ))}
-            </select>
+          {log.supervisor_rating && (
+            <div style={{ background: "#eff6ff", padding: "0.75rem 1rem", borderRadius: 8, marginTop: "0.75rem", borderLeft: "4px solid #2563eb" }}>
+              <strong>Work Supervisor Assessment</strong>
+              <p style={{ margin: "0.25rem 0 0" }}>
+                Rating: <strong>{log.supervisor_rating}/5</strong>
+                {log.supervisor_rating === 5 && " — Excellent"}
+                {log.supervisor_rating === 4 && " — Good"}
+                {log.supervisor_rating === 3 && " — Average"}
+                {log.supervisor_rating === 2 && " — Below Average"}
+                {log.supervisor_rating === 1 && " — Poor"}
+              </p>
+              {log.supervisor_feedback && (
+                <p style={{ margin: "0.25rem 0 0", color: "#64748b" }}>{log.supervisor_feedback}</p>
+              )}
+            </div>
+          )}
 
-            {criteria.map(c => (
-              <div key={c.id} style={{ marginBottom: "1rem" }}>
-                <label style={lbl}>
-                  {c.name} <span style={{ color: "#64748b", fontWeight: 400 }}>({c.weight}% weight, max 100)</span>
-                </label>
-                <input
-                  type="number" min={0} max={100}
-                  value={scores[c.id] || ""}
-                  onChange={e => setScores({ ...scores, [c.id]: e.target.value })}
-                  required style={inp}
-                />
-              </div>
-            ))}
-
-            {criteria.length > 0 && (
-              <div style={{ background: "#f1f5f9", padding: "1rem", borderRadius: 8, marginBottom: "1rem", textAlign: "center" }}>
-                <strong>Total Score:</strong>
-                <span style={{ fontSize: "1.5rem", fontWeight: 700, marginLeft: 10, color: total >= 70 ? "#16a34a" : "#dc2626" }}>
-                  {total.toFixed(2)} / 100
-                </span>
-              </div>
-            )}
-
-            <label style={lbl}>Notes</label>
-            <textarea
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              rows={3}
-              style={{ ...inp, resize: "vertical" }}
-              placeholder="Any additional comments about the student..."
-            />
-
-            <div style={{ display: "flex", gap: 10 }}>
-              <button type="submit" disabled={submitting}
-                style={{ padding: "0.75rem 1.5rem", background: "#2563eb", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600 }}>
-                {submitting ? "Submitting..." : "Submit Evaluation"}
-              </button>
-              <button type="button" onClick={() => setActiveTab("evaluations")}
-                style={{ padding: "0.75rem 1.5rem", background: "#fff", color: "#64748b", border: "1px solid #cbd5e1", borderRadius: 6, cursor: "pointer" }}>
-                Cancel
+          {log.status === "PENDING_ACADEMIC_EVALUATION" && (
+            <div style={{ marginTop: "1.25rem", borderTop: "1px solid #f1f5f9", paddingTop: "1.25rem" }}>
+              <h4 style={{ marginTop: 0, color: "#7c3aed" }}>Submit Your Evaluation</h4>
+              <label style={lbl}>Grade (e.g. A, B+, 75%) *</label>
+              <input
+                value={grades[log.id] || ""}
+                onChange={e => setGrades({ ...grades, [log.id]: e.target.value })}
+                placeholder="Enter grade"
+                style={{ ...inp, marginBottom: "1rem" }}
+              />
+              <label style={lbl}>Academic Comments</label>
+              <textarea
+                value={comments[log.id] || ""}
+                onChange={e => setComments({ ...comments, [log.id]: e.target.value })}
+                rows={3}
+                placeholder="How well do the tasks align with learning objectives?"
+                style={{ ...inp, resize: "vertical", marginBottom: "0.75rem" }}
+              />
+              <button
+                onClick={() => handleEvaluate(log.id)}
+                disabled={actionLoading === log.id}
+                style={{ padding: "0.6rem 1.5rem", background: "#7c3aed", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600 }}>
+                {actionLoading === log.id ? "Submitting..." : "Submit Evaluation"}
               </button>
             </div>
-          </form>
+          )}
+
+          {log.status === "COMPLETED" && (
+            <div style={{ marginTop: "1rem", background: "#f0fdf4", padding: "1rem", borderRadius: 8, borderLeft: "4px solid #16a34a" }}>
+              <strong>Your Evaluation</strong>
+              <p style={{ margin: "0.5rem 0 0" }}>Grade: <strong style={{ fontSize: "1.1rem", color: "#16a34a" }}>{log.academic_grade}</strong></p>
+              {log.academic_comments && (
+                <p style={{ margin: "0.25rem 0 0", color: "#64748b" }}>{log.academic_comments}</p>
+              )}
+            </div>
+          )}
         </div>
-      )}
+      ))}
     </Layout>
   );
 }
@@ -267,5 +258,9 @@ const btn = bg => ({
 >>>>>>> d8b3e49 (Merge frontend and backend)
 =======
 const lbl = { display: "block", fontWeight: 600, marginBottom: 4, fontSize: "0.875rem" };
+<<<<<<< HEAD
 const inp = { display: "block", width: "100%", padding: "0.6rem", marginBottom: "1rem", borderRadius: 6, border: "1px solid #cbd5e1", boxSizing: "border-box" };
 >>>>>>> 1d27c8d (admin able to make palcements)
+=======
+const inp = { display: "block", width: "100%", padding: "0.6rem", borderRadius: 6, border: "1px solid #cbd5e1", boxSizing: "border-box" };
+>>>>>>> cccbfc6 ( amendement on frontend admin and academic users)

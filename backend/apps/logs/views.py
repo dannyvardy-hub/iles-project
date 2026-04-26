@@ -16,7 +16,6 @@ class WeeklyLogListCreateView(APIView):
 
     def get(self, request):
         user = request.user
-
         if user.role == 'STUDENT':
             logs = WeeklyLog.objects.filter(student=user)
         elif user.role == 'WORKPLACE_SUPERVISOR':
@@ -39,10 +38,7 @@ class WeeklyLogListCreateView(APIView):
         elif user.role in ['ACADEMIC_SUPERVISOR', 'ADMIN']:
             logs = WeeklyLog.objects.all()
         else:
-            return Response(
-                {'error': 'Not authorized'},
-                status=status.HTTP_403_FORBIDDEN
-            )
+            return Response({'error': 'Not authorized'}, status=status.HTTP_403_FORBIDDEN)
 
         serializer = WeeklyLogSerializer(logs, many=True)
         return Response(serializer.data)
@@ -71,16 +67,14 @@ class WeeklyLogDetailView(APIView):
     def get(self, request, pk):
         log = self.get_object(pk)
         if log is None:
-            return Response(
-                {'error': 'Log not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+            return Response({'error': 'Log not found'}, status=status.HTTP_404_NOT_FOUND)
         serializer = WeeklyLogSerializer(log)
         return Response(serializer.data)
 
     def put(self, request, pk):
         log = self.get_object(pk)
         if log is None:
+
             return Response(
                 {'error': 'Log not found'},
                 status=status.HTTP_404_NOT_FOUND
@@ -95,6 +89,12 @@ class WeeklyLogDetailView(APIView):
                 {'error': 'Only DRAFT or RETURNED logs can be edited'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+            return Response({'error': 'Log not found'}, status=status.HTTP_404_NOT_FOUND)
+        if request.user != log.student:
+            return Response({'error': 'You can only edit your own logs'}, status=status.HTTP_403_FORBIDDEN)
+        if log.status not in [WeeklyLog.DRAFT, WeeklyLog.RETURNED]:
+            return Response({'error': 'Only DRAFT or RETURNED logs can be edited'}, status=status.HTTP_400_BAD_REQUEST)
         serializer = WeeklyLogSerializer(log, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
@@ -108,6 +108,7 @@ class WeeklyLogDeleteView(APIView):
         try:
             log = WeeklyLog.objects.get(pk=pk)
         except WeeklyLog.DoesNotExist:
+
             return Response(
                 {'error': 'Log not found'},
                 status=status.HTTP_404_NOT_FOUND
@@ -127,6 +128,13 @@ class WeeklyLogDeleteView(APIView):
             {'message': 'Log deleted'},
             status=status.HTTP_204_NO_CONTENT
         )
+        return Response({'error': 'Log not found'}, status=status.HTTP_404_NOT_FOUND)
+        if request.user != log.student:
+            return Response({'error': 'You can only delete your own logs'}, status=status.HTTP_403_FORBIDDEN)
+        if log.status != WeeklyLog.DRAFT:
+            return Response({'error': 'Only draft logs can be deleted'}, status=status.HTTP_400_BAD_REQUEST)
+        log.delete()
+        return Response({'message': 'Log deleted'}, status=status.HTTP_204_NO_CONTENT)
 
 
 class LogSubmitView(APIView):
@@ -135,6 +143,7 @@ class LogSubmitView(APIView):
         try:
             log = WeeklyLog.objects.get(pk=pk)
         except WeeklyLog.DoesNotExist:
+
             return Response(
                 {'error': 'Log not found'},
                 status=status.HTTP_404_NOT_FOUND
@@ -159,14 +168,63 @@ class LogSubmitView(APIView):
                 log.submitted_at = timezone.now()
                 comment = 'Log submitted by student'
 
+            return Response({'error': 'Log not found'}, status=status.HTTP_404_NOT_FOUND)
+        if request.user != log.student:
+            return Response({'error': 'You can only submit your own logs'}, status=status.HTTP_403_FORBIDDEN)
+        serializer = LogSubmitSerializer(data={}, context={'log': log})
+        if serializer.is_valid():
+            previous_status = log.status
+            log.status = WeeklyLog.PENDING_WORK_APPROVAL
+            log.submitted_at = timezone.now()
             log.save()
-
             LogStatusHistory.objects.create(
-                log=log,
-                changed_by=request.user,
+                log=log, changed_by=request.user,
+                previous_status=previous_status,
+                new_status=log.status, comment='Log submitted by student'
+            )
+            return Response({'message': 'Log submitted. Awaiting work supervisor approval.'})
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class LogWorkApprovalView(APIView):
+
+    def post(self, request, pk):
+        if request.user.role != 'WORKPLACE_SUPERVISOR':
+            return Response(
+                {'error': 'Only workplace supervisors can approve logs'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        try:
+            log = WeeklyLog.objects.get(pk=pk)
+        except WeeklyLog.DoesNotExist:
+            return Response({'error': 'Log not found'}, status=status.HTTP_404_NOT_FOUND)
+        if log.placement.workplace_supervisor != request.user:
+            return Response(
+                {'error': 'You can only review logs of your assigned students'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        serializer = LogWorkApprovalSerializer(data=request.data, context={'log': log})
+        if serializer.is_valid():
+            action = serializer.validated_data['action']
+            rating = serializer.validated_data.get('rating')
+            feedback = serializer.validated_data.get('feedback', '')
+            previous_status = log.status
+
+            if action == 'APPROVE':
+                log.status = WeeklyLog.PENDING_ACADEMIC_EVALUATION
+                log.supervisor_rating = rating
+                log.supervisor_feedback = feedback
+                log.supervisor_signed_off_at = timezone.now()
+            else:
+                log.status = WeeklyLog.RETURNED
+                log.supervisor_feedback = feedback
+
+            log.save()
+            LogStatusHistory.objects.create(
+                log=log, changed_by=request.user,
                 previous_status=previous_status,
                 new_status=log.status,
-                comment=comment
+                comment=f'Rating: {rating}/5 | {feedback}' if action == 'APPROVE' else feedback
             )
 
             return Response({
@@ -176,12 +234,16 @@ class LogSubmitView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class LogWorkApprovalView(APIView):
+        return Response({'message': f'Log {"approved and sent for academic evaluation" if action == "APPROVE" else "returned to student"}.'})
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class LogAcademicEvaluationView(APIView):
 
     def post(self, request, pk):
-        if request.user.role != 'WORKPLACE_SUPERVISOR':
+        if request.user.role not in ['ACADEMIC_SUPERVISOR', 'ADMIN']:
             return Response(
-                {'error': 'Only workplace supervisors can review logs'},
+                {'error': 'Only academic supervisors can evaluate logs'},
                 status=status.HTTP_403_FORBIDDEN
             )
         try:
@@ -254,6 +316,15 @@ class LogAcademicEvaluationView(APIView):
         serializer = LogAcademicEvaluationSerializer(
             data=request.data, context={'log': log}
         )
+
+                {'error': 'Only academic supervisors can evaluate logs'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        try:
+            log = WeeklyLog.objects.get(pk=pk)
+        except WeeklyLog.DoesNotExist:
+            return Response({'error': 'Log not found'}, status=status.HTTP_404_NOT_FOUND)
+        serializer = LogAcademicEvaluationSerializer(data=request.data, context={'log': log})
         if serializer.is_valid():
             previous_status = log.status
             log.status = WeeklyLog.COMPLETED
@@ -261,10 +332,8 @@ class LogAcademicEvaluationView(APIView):
             log.academic_comments = serializer.validated_data.get('comments', '')
             log.academic_evaluated_at = timezone.now()
             log.save()
-
             LogStatusHistory.objects.create(
-                log=log,
-                changed_by=request.user,
+                log=log, changed_by=request.user,
                 previous_status=previous_status,
                 new_status=log.status,
                 comment=f'Grade: {log.academic_grade} | {log.academic_comments}'
@@ -272,6 +341,7 @@ class LogAcademicEvaluationView(APIView):
 
             return Response({'message': 'Log graded and completed.'})
 
+            return Response({'message': 'Log evaluated and completed.'})
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -285,23 +355,7 @@ class LogHistoryView(APIView):
                 {'error': 'Log not found'},
                 status=status.HTTP_404_NOT_FOUND
             )
+            return Response({'error': 'Log not found'}, status=status.HTTP_404_NOT_FOUND)
         history = LogStatusHistory.objects.filter(log=log).order_by('timestamp')
         serializer = LogStatusHistorySerializer(history, many=True)
         return Response(serializer.data)
-
-class WeeklyLogDeleteView(APIView):
-
-    def delete(self, request, pk):
-        try:
-            log = WeeklyLog.objects.get(pk=pk)
-        except WeeklyLog.DoesNotExist:
-            return Response({'error': 'Log not found'}, status=status.HTTP_404_NOT_FOUND)
-
-        if request.user != log.student:
-            return Response({'error': 'You can only delete your own logs'}, status=status.HTTP_403_FORBIDDEN)
-
-        if log.status != WeeklyLog.DRAFT:
-            return Response({'error': 'Only draft logs can be deleted'}, status=status.HTTP_400_BAD_REQUEST)
-
-        log.delete()
-        return Response({'message': 'Log deleted'}, status=status.HTTP_204_NO_CONTENT)
