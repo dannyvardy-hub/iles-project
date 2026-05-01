@@ -7,16 +7,18 @@ class WeeklyLog(models.Model):
 
     DRAFT = 'DRAFT'
     PENDING_WORK_APPROVAL = 'PENDING_WORK_APPROVAL'
+    RETURNED = 'RETURNED'
+    RESUBMITTED = 'RESUBMITTED'
     PENDING_ACADEMIC_EVALUATION = 'PENDING_ACADEMIC_EVALUATION'
     COMPLETED = 'COMPLETED'
-    RETURNED = 'RETURNED'
 
     STATUS_CHOICES = [
         (DRAFT, 'Draft'),
         (PENDING_WORK_APPROVAL, 'Pending Work Approval'),
+        (RETURNED, 'Returned to Student'),
+        (RESUBMITTED, 'Resubmitted by Student'),
         (PENDING_ACADEMIC_EVALUATION, 'Pending Academic Evaluation'),
         (COMPLETED, 'Completed'),
-        (RETURNED, 'Returned to Student'),
     ]
 
     student = models.ForeignKey(
@@ -35,15 +37,15 @@ class WeeklyLog(models.Model):
     activities = models.TextField()
     learning_outcomes = models.TextField(blank=True)
     challenges = models.TextField(blank=True)
-    status = models.CharField(
-        max_length=40, choices=STATUS_CHOICES, default=DRAFT
-    )
+    status = models.CharField(max_length=40, choices=STATUS_CHOICES, default=DRAFT)
     submission_deadline = models.DateTimeField()
     submitted_at = models.DateTimeField(null=True, blank=True)
+    resubmitted_at = models.DateTimeField(null=True, blank=True)
 
     # Work supervisor feedback
     supervisor_rating = models.PositiveIntegerField(null=True, blank=True)
     supervisor_feedback = models.TextField(blank=True)
+    supervisor_rejection_reason = models.TextField(blank=True)
     supervisor_signed_off_at = models.DateTimeField(null=True, blank=True)
 
     # Academic evaluation
@@ -67,10 +69,7 @@ class LogStatusHistory(models.Model):
         on_delete=models.CASCADE,
         related_name='history'
     )
-    changed_by = models.ForeignKey(
-        CustomUser,
-        on_delete=models.CASCADE
-    )
+    changed_by = models.ForeignKey(CustomUser, on_delete=models.CASCADE)
     previous_status = models.CharField(max_length=40)
     new_status = models.CharField(max_length=40)
     comment = models.TextField(blank=True)
