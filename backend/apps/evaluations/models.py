@@ -53,8 +53,9 @@ class Evaluation(models.Model):
         criteria = EvaluationCriteria.objects.filter(is_active=True)
         total = 0
         for criterion in criteria:
-            score = self.scores.get(str(criterion.id), 0)
-            total += score * (criterion.weight / 100)
+            score = float(self.scores.get(str(criterion.id), 0))
+            weight = float(criterion.weight)
+            total += score * (weight / 100)
         self.total_score = round(total, 2)
         super().save(*args, **kwargs)
 
