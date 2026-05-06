@@ -23,7 +23,7 @@ export default function SupervisorDashboard() {
           { label: "Pending Reviews", value: data?.pending_reviews, color: "#d97706" },
           { label: "Approved Logs", value: data?.approved_logs, color: "#16a34a" },
         ].map(c => (
-          <div key={c.label} style={{ background: "#fff", padding: "1.25rem", borderRadius: 10, borderLeft: `4px solid ${c.color}` }}>
+          <div key={c.label} style={{ background: "#fff", padding: "1.25rem", borderRadius: 10, borderLeft: 4px solid ${c.color} }}>
             <p style={{ margin: 0, color: "#64748b" }}>{c.label}</p>
             <h2 style={{ margin: "0.25rem 0 0", color: c.color }}>{loading ? "..." : c.value}</h2>
           </div>
@@ -39,45 +39,4 @@ export default function SupervisorDashboard() {
       </div>
     </Layout>
   );
-}
-
-const card = {
-  padding: "15px",
-  background: "#fff",
-  borderRadius: "10px",
-};
-
-export default function Dashboard() {
-
-import Layout from "../../components/Layout";
-
-export default function SupervisorDashboard() {
-  return (
-    <Layout title="Supervisor Dashboard">
-
-      <div style={{ display: "grid", gap: "15px" }}>
-
-        <div style={card}>
-          <h3>👨‍🎓 Assigned Interns</h3>
-          <button>View Interns</button>
-        </div>
-
-        <div style={card}>
-          <h3>📄 Pending Logs</h3>
-          <button>Review Logs</button>
-        </div>
-
-      </div>
-
-    </Layout>
-  );
-}
-
-const card = {
-  padding: "15px",
-  background: "#fff",
-  borderRadius: "10px",
-};
-
-const card = (bg) => ({ background: bg, padding: "1.25rem", borderRadius: 10 });
 }
