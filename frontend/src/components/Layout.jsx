@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import NotificationBell from "./NotificationBell";
 
 const navLinks = {
   STUDENT: [
@@ -66,7 +67,10 @@ export default function Layout({ title, children }) {
 
       {/* Main content */}
       <main style={{ flex: 1, padding: "2rem", background: "#f8fafc" }}>
-        <h1 style={{ marginBottom: "1.5rem", color: "#1e293b" }}>{title}</h1>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
+          <h1 style={{ margin: 0, color: "#1e293b" }}>{title}</h1>
+          <NotificationBell />
+        </div>
         {children}
       </main>
     </div>
