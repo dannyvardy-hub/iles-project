@@ -55,34 +55,24 @@ export default function ReviewLogs() {
   };
 
   const handleApprove = async (id) => {
-    if (!ratings[id]) return alert("Please select a rating before approving.");
-    setActionLoading(id + "APPROVE");
-    try {
-      await workApproveLog(id, "APPROVE", ratings[id], feedbacks[id] || "", "");
-      const update = prev => prev.map(l =>
-        l.id === id ? { ...l, status: "PENDING_ACADEMIC_EVALUATION", supervisor_rating: ratings[id] } : l
+  if (!ratings[id]) return alert("Please select a rating before approving.");
+  setActionLoading(id + "APPROVE");
+  setError("");
+  try {
+    await workApproveLog(id, "APPROVE", ratings[id], feedbacks[id] || "", "");
+    setAllLogs(prev => {
+      const updated = prev.map(l =>
+        l.id === id ? { ...l, status: "PENDING_ACADEMIC_EVALUATION" } : l
       );
-      setAllLogs(update);
-      handleFilter(filter);
-      setAllLogs(prev => {
-        const updated = prev.map(l =>
-          l.id === id ? { ...l, status: "PENDING_ACADEMIC_EVALUATION", supervisor_rating: ratings[id] } : l
-        );
-        if (filter === "PENDING") {
-          setLogs(updated.filter(l => l.status === "PENDING_WORK_APPROVAL" || l.status === "RESUBMITTED"));
-        } else if (filter === "ALL") {
-          setLogs(updated);
-        } else {
-          setLogs(updated.filter(l => l.status === filter));
-        }
-        return updated;
-      });
-    } catch (err) {
-      setError(err.response?.data?.error || "Failed to approve.");
-    } finally {
-      setActionLoading(null);
-    }
-  };
+      handleFilterUpdate(updated, filter);
+      return updated;
+    });
+  } catch (err) {
+    setError(err.response?.data?.error || err.response?.data?.non_field_errors?.[0] || "Failed to approve.");
+  } finally {
+    setActionLoading(null);
+  }
+};
 
   const handleFilterUpdate = (updated, f) => {
   if (f === "ALL") setLogs(updated);
@@ -93,15 +83,18 @@ export default function ReviewLogs() {
 const handleReject = async (id) => {
   if (!rejections[id]?.trim()) return alert("Please enter a rejection reason.");
   setActionLoading(id + "REJECT");
+  setError("");
   try {
     await workApproveLog(id, "REJECT", undefined, "", rejections[id]);
     setAllLogs(prev => {
-      const updated = prev.map(l => l.id === id ? { ...l, status: "RETURNED" } : l);
+      const updated = prev.map(l =>
+        l.id === id ? { ...l, status: "RETURNED" } : l
+      );
       handleFilterUpdate(updated, filter);
       return updated;
     });
   } catch (err) {
-    setError(err.response?.data?.error || "Failed to reject.");
+    setError(err.response?.data?.error || err.response?.data?.non_field_errors?.[0] || "Failed to reject.");
   } finally {
     setActionLoading(null);
   }

@@ -179,6 +179,18 @@ class LogSubmitView(APIView):
                     log=log,
                     message=f'{request.user.first_name} {request.user.last_name} has {"resubmitted" if is_resubmission else "submitted"} Week {log.week_number} log for your review.'
                 )   
+                # Send notification safely
+                try:
+                    from apps.notifications.models import Notification
+                    if log.placement and log.placement.workplace_supervisor:
+                        Notification.objects.create(
+                            recipient=log.placement.workplace_supervisor,
+                            sender=request.user,
+                            log=log,
+                            message=f'{request.user.first_name} {request.user.last_name} has {"resubmitted" if is_resubmission else "submitted"} Week {log.week_number} log for your review.'
+                        )
+                except Exception as e:
+                    print(f'Notification error: {e}')
 
             return Response({
                 'message': 'Log resubmitted successfully.' if is_resubmission else 'Log submitted successfully.'
@@ -239,29 +251,37 @@ class LogWorkApprovalView(APIView):
                 comment=comment
             )
             
-            if action == 'APPROVE':
-                Notification.objects.create(
-                    recipient=log.student,
-                    sender=request.user,
-                    log=log,
-                    message=f'Your Week {log.week_number} log has been approved by {request.user.first_name} {request.user.last_name} (Rating: {rating}/5) and sent for academic evaluation.'
-                )
-            from apps.users.models import CustomUser
-            academic_supervisors = CustomUser.objects.filter(role='ACADEMIC_SUPERVISOR')
-            for academic in academic_supervisors:
-                Notification.objects.create(
-                recipient=academic,
-                sender=request.user,
-                log=log,
-                message=f'Week {log.week_number} log from {log.student.first_name} {log.student.last_name} has been approved by the workplace supervisor and is ready for your evaluation.'
-            )
-        else:
-            Notification.objects.create(
-                recipient=log.student,
-                sender=request.user,
-                log=log,
-                message=f'Your Week {log.week_number} log has been rejected by {request.user.first_name} {request.user.last_name}. Reason: {rejection_reason}. Please update and resubmit.'
-            )
+            try:
+                from apps.notifications.models import Notification
+                from apps.users.models import CustomUser
+
+                if action == 'APPROVE':
+                    # Notify student
+                    Notification.objects.create(
+                        recipient=log.student,
+                        sender=request.user,
+                        log=log,
+                        message=f'Your Week {log.week_number} log has been approved by {request.user.first_name} {request.user.last_name} (Rating: {rating}/5) and sent for academic evaluation.'
+                    )
+                    # Notify all academic supervisors
+                    for academic in CustomUser.objects.filter(role='ACADEMIC_SUPERVISOR'):
+                        Notification.objects.create(
+                            recipient=academic,
+                            sender=request.user,
+                            log=log,
+                            message=f'Week {log.week_number} log from {log.student.first_name} {log.student.last_name} has been approved and is ready for your evaluation.'
+                        )
+                else:
+                    # Notify student of rejection
+                    Notification.objects.create(
+                        recipient=log.student,
+                        sender=request.user,
+                        log=log,
+                        message=f'Your Week {log.week_number} log has been rejected by {request.user.first_name} {request.user.last_name}. Reason: {rejection_reason}. Please update and resubmit.'
+                    )
+            except Exception as e:
+                print(f'Notification error: {e}')
+
             return Response({
                 'message': 'Log approved and sent for academic evaluation.' if action == 'APPROVE' else 'Log rejected and returned to student.'
             })
