@@ -113,18 +113,16 @@ class DashboardView(APIView):
 
         elif user.role == 'WORKPLACE_SUPERVISOR':
             data = {
-        'total_interns': InternshipPlacement.objects.filter(
-            workplace_supervisor=user
-        ).count(),
-        'pending_reviews': WeeklyLog.objects.filter(
-            placement__workplace_supervisor=user,
-            status__in=['PENDING_WORK_APPROVAL', 'RESUBMITTED']
-        ).count(),
-        'approved_logs': WeeklyLog.objects.filter(
-            placement__workplace_supervisor=user,
-            status='COMPLETED'
-        ).count(),
-    }
+                'total_interns': InternshipPlacement.objects.filter(workplace_supervisor=user).count(),
+                'pending_reviews': WeeklyLog.objects.filter(
+                    placement__workplace_supervisor=user,
+                    status='SUBMITTED'
+                ).count(),
+                'approved_logs': WeeklyLog.objects.filter(
+                    placement__workplace_supervisor=user,
+                    status='APPROVED'
+                ).count(),
+            }
 
         elif user.role == 'ACADEMIC_SUPERVISOR':
             data = {
@@ -156,14 +154,3 @@ class UserDeleteView(APIView):
 
         user.delete()
         return Response({'message': 'User deleted'}, status=status.HTTP_204_NO_CONTENT)
-
-class UserDetailView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request, pk):
-        try:
-            user = CustomUser.objects.get(pk=pk)
-            serializer = UserSerializer(user)
-            return Response(serializer.data)
-        except CustomUser.DoesNotExist:
-            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
