@@ -1,8 +1,8 @@
 [phases.setup]
-nixPkgs = ["python311", "postgresql"]
+nixPkgs = ["python313", "postgresql"]
 
 [phases.install]
 cmds = ["pip install -r requirements.txt"]
 
 [start]
-cmd = "python manage.py migrate && gunicorn iles.wsgi:application --bind 0.0.0.0:$PORT"
+cmd = "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn iles.wsgi:application --bind 0.0.0.0:$PORT"
