@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const BASE = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+const BASE = "https://iles-project-production.up.railway.app/api";;
 
 export const login = async (username, password) => {
   const res = await axios.post(`${BASE}/auth/login/`, { username, password });
