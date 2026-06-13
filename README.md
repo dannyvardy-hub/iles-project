@@ -1,8 +1,8 @@
 # ILES - Internship Logging & Evaluation System (2026)
 
 ## Team Roles
-- **Team Lead:** Gerald (All-Rounder)
-- **Testing & Documentation:** Kenneth
+- **Team Lead & Documentation:** Gerald (All-Rounder)
+- **Testing:** Kenneth
 - **Backend Logic:** Macalvin (Django)
 - **Frontend/Design:** Danny (React)
 
